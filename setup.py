@@ -82,6 +82,7 @@ setup(
         "sortedcontainers>=1.5.4, <1.6",
         "tornado>=4.3, <4.6",
         "urwid>=1.3.1, <1.4",
+        "uncurl>=0.0.8, <0.1",
     ],
     extras_require={
         ':sys_platform == "win32"': [

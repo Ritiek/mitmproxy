@@ -7,6 +7,7 @@ from mitmproxy.utils import strutils
 from mitmproxy.net.http.http1 import assemble
 
 import pyperclip
+import uncurl
 
 
 def curl_command(f: flow.Flow) -> str:
@@ -33,10 +34,17 @@ def raw(f: flow.Flow) -> bytes:
         raise exceptions.CommandError("Can't export flow with no request.")
     return assemble.assemble_request(f.request)  # type: ignore
 
+def py_requests(f: flow.Flow) -> str:
+    if not hasattr(f, "request"):
+        raise exceptions.CommandError("Can't export flow with no request.")
+    data = uncurl.parse(curl_command(f))
+    return ("import requests\n\n" + data)
+
 
 formats = dict(
     curl = curl_command,
     raw = raw,
+    python = py_requests,
 )
 
 
