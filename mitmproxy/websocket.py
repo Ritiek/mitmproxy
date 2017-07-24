@@ -4,7 +4,7 @@ from typing import List, Optional
 from mitmproxy import flow
 from mitmproxy.net import websockets
 from mitmproxy.types import serializable
-from mitmproxy.utils import strutils
+from mitmproxy.utils import strutils, human
 
 
 class WebSocketMessage(serializable.Serializable):
@@ -45,6 +45,7 @@ class WebSocketFlow(flow.Flow):
         self.close_code = '(status code missing)'
         self.close_message = '(message missing)'
         self.close_reason = 'unknown status code'
+        self.stream = False
 
         if handshake_flow:
             self.client_key = websockets.get_client_key(handshake_flow.request.headers)
@@ -94,8 +95,8 @@ class WebSocketFlow(flow.Flow):
     def message_info(self, message: WebSocketMessage) -> str:
         return "{client} {direction} WebSocket {type} message {direction} {server}{endpoint}".format(
             type=message.type,
-            client=repr(self.client_conn.address),
-            server=repr(self.server_conn.address),
+            client=human.format_address(self.client_conn.address),
+            server=human.format_address(self.server_conn.address),
             direction="->" if message.from_client else "<-",
             endpoint=self.handshake_flow.request.path,
         )

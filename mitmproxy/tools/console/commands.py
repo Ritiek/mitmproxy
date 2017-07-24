@@ -1,38 +1,10 @@
 import urwid
 import blinker
 import textwrap
-from mitmproxy.tools.console import common
+from mitmproxy.tools.console import layoutwidget
 from mitmproxy.tools.console import signals
 
 HELP_HEIGHT = 5
-
-
-footer = [
-    ('heading_key', "enter"), ":edit ",
-    ('heading_key', "?"), ":help ",
-]
-
-
-def _mkhelp():
-    text = []
-    keys = [
-        ("enter", "execute command"),
-    ]
-    text.extend(common.format_keyvals(keys, key="key", val="text", indent=4))
-    return text
-
-
-help_context = _mkhelp()
-
-
-def fcol(s, width, attr):
-    s = str(s)
-    return (
-        "fixed",
-        width,
-        urwid.Text((attr, s))
-    )
-
 
 command_focus_change = blinker.Signal()
 
@@ -117,7 +89,7 @@ class CommandsList(urwid.ListBox):
         super().__init__(self.walker)
 
     def keypress(self, size, key):
-        if key == "enter":
+        if key == "m_select":
             foc, idx = self.get_focus()
             signals.status_prompt_command.send(partial=foc.cmd.path + " ")
         elif key == "m_start":
@@ -151,7 +123,8 @@ class CommandHelp(urwid.Frame):
         self.set_body(self.widget(txt))
 
 
-class Commands(urwid.Pile):
+class Commands(urwid.Pile, layoutwidget.LayoutWidget):
+    title = "Commands"
     keyctx = "commands"
 
     def __init__(self, master):
@@ -165,7 +138,7 @@ class Commands(urwid.Pile):
         self.master = master
 
     def keypress(self, size, key):
-        if key == "tab":
+        if key == "m_next":
             self.focus_position = (
                 self.focus_position + 1
             ) % len(self.widget_list)

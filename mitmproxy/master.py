@@ -147,13 +147,13 @@ class Master:
             raise exceptions.ReplayException(
                 "Can't replay intercepted flow."
             )
-        if f.request.raw_content is None:
-            raise exceptions.ReplayException(
-                "Can't replay flow with missing content."
-            )
         if not f.request:
             raise exceptions.ReplayException(
                 "Can't replay flow with missing request."
+            )
+        if f.request.raw_content is None:
+            raise exceptions.ReplayException(
+                "Can't replay flow with missing content."
             )
 
         f.backup()
@@ -161,6 +161,11 @@ class Master:
 
         f.response = None
         f.error = None
+
+        if f.request.http_version == "HTTP/2.0":  # https://github.com/mitmproxy/mitmproxy/issues/2197
+            f.request.http_version = "HTTP/1.1"
+            host = f.request.headers.pop(":authority")
+            f.request.headers.insert(0, "host", host)
 
         rt = http_replay.RequestReplayThread(
             self.server.config,

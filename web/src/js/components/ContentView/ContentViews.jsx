@@ -2,7 +2,7 @@ import React, { Component } from 'react'
 import PropTypes from 'prop-types'
 import { connect } from 'react-redux'
 import { setContentViewDescription, setContent } from '../../ducks/ui/flow'
-import ContentLoader from './ContentLoader'
+import withContentLoader from './ContentLoader'
 import { MessageUtils } from '../../flow/utils'
 import CodeEditor from './CodeEditor'
 
@@ -28,9 +28,9 @@ Edit.propTypes = {
 function Edit({ content, onChange }) {
     return <CodeEditor content={content} onChange={onChange}/>
 }
-Edit = ContentLoader(Edit)
+Edit = withContentLoader(Edit)
 
-class ViewServer extends Component {
+export class PureViewServer extends Component {
     static propTypes  = {
         showFullContent: PropTypes.bool.isRequired,
         maxLines: PropTypes.number.isRequired,
@@ -85,7 +85,7 @@ class ViewServer extends Component {
 
 }
 
-ViewServer = connect(
+const ViewServer = connect(
     state => ({
         showFullContent: state.ui.flow.showFullContent,
         maxLines: state.ui.flow.maxContentLines
@@ -94,6 +94,6 @@ ViewServer = connect(
         setContentViewDescription,
         setContent
     }
-)(ContentLoader(ViewServer))
+)(withContentLoader(PureViewServer))
 
 export { Edit, ViewServer, ViewImage }

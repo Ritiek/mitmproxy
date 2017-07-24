@@ -1,5 +1,6 @@
 import json as _json
 from unittest import mock
+import os
 
 import tornado.testing
 from tornado import httpclient
@@ -252,6 +253,16 @@ class TestApp(tornado.testing.AsyncHTTPTestCase):
         assert self.put_json("/settings", {"anticache": True}).code == 200
         assert self.put_json("/settings", {"wtf": True}).code == 400
 
+    def test_options(self):
+        j = json(self.fetch("/options"))
+        assert type(j) == dict
+        assert type(j['anticache']) == dict
+
+    def test_option_update(self):
+        assert self.put_json("/options", {"anticache": True}).code == 200
+        assert self.put_json("/options", {"wtf": True}).code == 400
+        assert self.put_json("/options", {"anticache": "foo"}).code == 400
+
     def test_err(self):
         with mock.patch("mitmproxy.tools.web.app.IndexHandler.get") as f:
             f.side_effect = RuntimeError
@@ -264,14 +275,51 @@ class TestApp(tornado.testing.AsyncHTTPTestCase):
         ws_client = yield websocket.websocket_connect(ws_url)
         self.master.options.anticomp = True
 
-        response = yield ws_client.read_message()
-        assert _json.loads(response) == {
+        r1 = yield ws_client.read_message()
+        r2 = yield ws_client.read_message()
+        j1 = _json.loads(r1)
+        j2 = _json.loads(r2)
+        print(j1)
+        response = dict()
+        response[j1['resource']] = j1
+        response[j2['resource']] = j2
+        assert response['settings'] == {
             "resource": "settings",
             "cmd": "update",
             "data": {"anticomp": True},
+        }
+        assert response['options'] == {
+            "resource": "options",
+            "cmd": "update",
+            "data": {
+                "anticomp": {
+                    "value": True,
+                    "choices": None,
+                    "default": False,
+                    "help": "Try to convince servers to send us un-compressed data.",
+                    "type": "bool",
+                }
+            }
         }
         ws_client.close()
 
         # trigger on_close by opening a second connection.
         ws_client2 = yield websocket.websocket_connect(ws_url)
         ws_client2.close()
+
+    def test_generate_tflow_js(self):
+        _tflow = app.flow_to_json(tflow.tflow(resp=True, err=True))
+        # Set some value as constant, so that _tflow.js would not change every time.
+        _tflow['client_conn']['id'] = "4a18d1a0-50a1-48dd-9aa6-d45d74282939"
+        _tflow['id'] = "d91165be-ca1f-4612-88a9-c0f8696f3e29"
+        _tflow['error']['timestamp'] = 1495370312.4814785
+        _tflow['response']['timestamp_end'] = 1495370312.4814625
+        _tflow['response']['timestamp_start'] = 1495370312.481462
+        _tflow['server_conn']['id'] = "f087e7b2-6d0a-41a8-a8f0-e1a4761395f8"
+        tflow_json = _json.dumps(_tflow, indent=4, sort_keys=True)
+        here = os.path.abspath(os.path.dirname(__file__))
+        web_root = os.path.join(here, os.pardir, os.pardir, os.pardir, os.pardir, 'web')
+        tflow_path = os.path.join(web_root, 'src/js/__tests__/ducks/_tflow.js')
+        content = """export default function(){{\n    return {tflow_json}\n}}""".format(tflow_json=tflow_json)
+        with open(tflow_path, 'w') as f:
+            f.write(content)

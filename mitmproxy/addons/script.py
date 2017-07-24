@@ -1,5 +1,6 @@
 import os
-import importlib
+import importlib.util
+import importlib.machinery
 import time
 import sys
 import typing
@@ -16,12 +17,21 @@ def load_script(actx, path):
     if not os.path.exists(path):
         ctx.log.info("No such file: %s" % path)
         return
-    loader = importlib.machinery.SourceFileLoader(os.path.basename(path), path)
+
+    fullname = "__mitmproxy_script__.{}".format(
+        os.path.splitext(os.path.basename(path))[0]
+    )
+    # the fullname is not unique among scripts, so if there already is an existing script with said
+    # fullname, remove it.
+    sys.modules.pop(fullname, None)
     try:
         oldpath = sys.path
         sys.path.insert(0, os.path.dirname(path))
         with addonmanager.safecall():
-            m = loader.load_module()
+            loader = importlib.machinery.SourceFileLoader(fullname, path)
+            spec = importlib.util.spec_from_loader(fullname, loader=loader)
+            m = importlib.util.module_from_spec(spec)
+            loader.exec_module(m)
             if not getattr(m, "name", None):
                 m.name = path
             return m
@@ -52,7 +62,14 @@ class Script:
 
     def tick(self):
         if time.time() - self.last_load > self.ReloadInterval:
-            mtime = os.stat(self.fullpath).st_mtime
+            try:
+                mtime = os.stat(self.fullpath).st_mtime
+            except FileNotFoundError:
+                scripts = ctx.options.scripts
+                scripts.remove(self.path)
+                ctx.options.update(scripts=scripts)
+                return
+
             if mtime > self.last_mtime:
                 ctx.log.info("Loading script: %s" % self.path)
                 if self.ns:

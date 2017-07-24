@@ -1,3 +1,6 @@
+from unittest import mock
+import pytest
+
 from mitmproxy.test import tflow
 from mitmproxy.net.http import http1
 from mitmproxy.net.tcp import TCPClient
@@ -65,6 +68,7 @@ class TestExpectHeader(tservers.HTTPProxyTest):
         assert resp.status_code == 200
 
         client.finish()
+        client.close()
 
 
 class TestHeadContentLength(tservers.HTTPProxyTest):
@@ -76,3 +80,32 @@ class TestHeadContentLength(tservers.HTTPProxyTest):
                 """head:'%s/p/200:h"Content-Length"="42"'""" % self.server.urlbase
             )
         assert resp.headers["Content-Length"] == "42"
+
+
+class TestStreaming(tservers.HTTPProxyTest):
+
+    @pytest.mark.parametrize('streaming', [True, False])
+    def test_streaming(self, streaming):
+
+        class Stream:
+            def requestheaders(self, f):
+                f.request.stream = streaming
+
+            def responseheaders(self, f):
+                f.response.stream = streaming
+
+        def assert_write(self, v):
+            if streaming:
+                assert len(v) <= 4096
+            return self.o.write(v)
+
+        self.master.addons.add(Stream())
+        p = self.pathoc()
+        with p.connect():
+            with mock.patch("mitmproxy.net.tcp.Writer.write", side_effect=assert_write, autospec=True):
+                # response with 10000 bytes
+                r = p.request("post:'%s/p/200:b@10000'" % self.server.urlbase)
+                assert len(r.content) == 10000
+
+                # request with 10000 bytes
+                assert p.request("post:'%s/p/200':b@10000" % self.server.urlbase)

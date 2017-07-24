@@ -6,7 +6,7 @@ from typing import Optional, Sequence
 
 from mitmproxy import exceptions
 from mitmproxy import optmanager
-from mitmproxy.tools.console import common
+from mitmproxy.tools.console import layoutwidget
 from mitmproxy.tools.console import signals
 from mitmproxy.tools.console import overlay
 
@@ -18,28 +18,6 @@ def can_edit_inplace(opt):
         return False
     if opt.typespec in [str, int, Optional[str], Optional[int]]:
         return True
-
-
-footer = [
-    ('heading_key', "enter"), ":edit ",
-    ('heading_key', "?"), ":help ",
-]
-
-
-def _mkhelp():
-    text = []
-    keys = [
-        ("enter", "edit option"),
-        ("D", "reset all to defaults"),
-        ("d", "reset this option to default"),
-        ("l", "load options from file"),
-        ("w", "save options to file"),
-    ]
-    text.extend(common.format_keyvals(keys, key="key", val="text", indent=4))
-    return text
-
-
-help_context = _mkhelp()
 
 
 def fcol(s, width, attr):
@@ -198,8 +176,10 @@ class OptionsList(urwid.ListBox):
                 except exceptions.OptionsError as v:
                     signals.status_message.send(message=str(v))
                 self.walker.stop_editing()
+                return None
             elif key == "esc":
                 self.walker.stop_editing()
+                return None
         else:
             if key == "m_start":
                 self.set_focus(0)
@@ -207,7 +187,7 @@ class OptionsList(urwid.ListBox):
             elif key == "m_end":
                 self.set_focus(len(self.walker.opts) - 1)
                 self.walker._modified()
-            elif key == "enter":
+            elif key == "m_select":
                 foc, idx = self.get_focus()
                 if foc.opt.typespec == bool:
                     self.master.options.toggler(foc.opt.name)()
@@ -263,7 +243,8 @@ class OptionHelp(urwid.Frame):
         self.set_body(self.widget(txt))
 
 
-class Options(urwid.Pile):
+class Options(urwid.Pile, layoutwidget.LayoutWidget):
+    title = "Options"
     keyctx = "options"
 
     def __init__(self, master):
@@ -282,7 +263,7 @@ class Options(urwid.Pile):
         return foc.opt.name
 
     def keypress(self, size, key):
-        if key == "tab":
+        if key == "m_next":
             self.focus_position = (
                 self.focus_position + 1
             ) % len(self.widget_list)

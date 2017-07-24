@@ -10,15 +10,17 @@ from mitmproxy.net.http import status_codes
 
 class Core:
     @command.command("set")
-    def set(self, spec: str) -> None:
+    def set(self, *spec: str) -> None:
         """
             Set an option of the form "key[=value]". When the value is omitted,
             booleans are set to true, strings and integers are set to None (if
             permitted), and sequences are emptied. Boolean values can be true,
-            false or toggle.
+            false or toggle. If multiple specs are passed, they are joined
+            into one separated by spaces.
         """
+        strspec = " ".join(spec)
         try:
-            ctx.options.set(spec)
+            ctx.options.set(strspec)
         except exceptions.OptionsError as e:
             raise exceptions.CommandError(e) from e
 
@@ -110,7 +112,7 @@ class Core:
         val = sval  # type: typing.Union[int, str]
         if spec == "status_code":
             try:
-                val = int(val)
+                val = int(val)  # type: ignore
             except ValueError as v:
                 raise exceptions.CommandError(
                     "Status code is not an integer: %s" % val
@@ -143,7 +145,7 @@ class Core:
                 if spec == "status_code":
                     resp.status_code = val
                     if val in status_codes.RESPONSES:
-                        resp.reason = status_codes.RESPONSES[int(val)]
+                        resp.reason = status_codes.RESPONSES[val]  # type: ignore
                 elif spec == "reason":
                     resp.reason = val
                 else:

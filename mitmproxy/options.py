@@ -155,6 +155,13 @@ class Options(optmanager.OptManager):
             """
         )
         self.add_option(
+            "stream_websockets", bool, False,
+            """
+            Stream WebSocket messages between client and server.
+            Messages are captured and cannot be modified.
+            """
+        )
+        self.add_option(
             "verbosity", int, 2,
             "Log verbosity."
         )
@@ -202,14 +209,11 @@ class Options(optmanager.OptManager):
         self.add_option(
             "proxyauth", Optional[str], None,
             """
-            Require proxy authentication. Value may be "any" to require
-            authenticaiton but accept any credentials, start with "@" to specify
-            a path to an Apache htpasswd file, be of the form
-            "username:password", or be of the form
-            "ldap[s]:url_server_ldap:dn:group", the dn must include "?", which will be
-            the username prompted, and the group is the group the user must belong to
-            an example would be
-            "ldap:ldap.forumsys.com:uid=?,dc=example,dc=com:person".
+            Require proxy authentication. Format:
+            "username:pass",
+            "any" to accept any user/pass combination,
+            "@path" to use an Apache htpasswd file,
+            or "ldap[s]:url_server_ldap:dn_auth:password:dn_subtree" for LDAP authentication.
             """
         )
         self.add_option(
@@ -280,7 +284,7 @@ class Options(optmanager.OptManager):
             """
             Mode can be "regular", "transparent", "socks5", "reverse:SPEC",
             or "upstream:SPEC". For reverse and upstream proxy modes, SPEC
-            is proxy specification in the form of "http[s]://host[:port]".
+            is host specification in the form of "http[s]://host[:port]".
             """
         )
         self.add_option(
@@ -303,9 +307,8 @@ class Options(optmanager.OptManager):
         self.add_option(
             "http2_priority", bool, False,
             """
-            PRIORITY forwarding for HTTP/2 connections. PRIORITY forwarding is
-            disabled by default, because some webservers fail to implement the
-            RFC properly.
+            PRIORITY forwarding for HTTP/2 connections. Disabled by default to ensure compatibility
+            with misbehaving servers.
             """
         )
         self.add_option(
@@ -329,7 +332,7 @@ class Options(optmanager.OptManager):
         self.add_option(
             "upstream_auth", Optional[str], None,
             """
-            Add HTTP Basic authentcation to upstream proxy and reverse proxy
+            Add HTTP Basic authentication to upstream proxy and reverse proxy
             requests. Format: username:password.
             """
         )
@@ -385,11 +388,15 @@ class Options(optmanager.OptManager):
             choices=sorted(console_layouts),
         )
         self.add_option(
+            "console_layout_headers", bool, True,
+            "Show layout comonent headers",
+        )
+        self.add_option(
             "console_focus_follow", bool, False,
             "Focus follows new flows."
         )
         self.add_option(
-            "console_palette", str, "dark",
+            "console_palette", str, "solarized_dark",
             "Color palette.",
             choices=sorted(console_palettes),
         )
@@ -437,7 +444,13 @@ class Options(optmanager.OptManager):
         # Dump options
         self.add_option(
             "flow_detail", int, 1,
-            "Flow detail display level."
+            """
+            The display detail level for flows in mitmdump: 0 (almost quiet) to 3 (very verbose).
+              0: shortened request URL, response status code, WebSocket and TCP message notifications.
+              1: full request URL with response status code
+              2: 1 + HTTP headers
+              3: 2 + full response content, content of WebSocket and TCP messages.
+            """
         )
 
         self.update(**kwargs)

@@ -1,65 +1,82 @@
-import platform
-
 import urwid
 
 from mitmproxy import flowfilter
 from mitmproxy.tools.console import common
-
-from mitmproxy import version
-
-footer = [
-    ("heading", 'mitmproxy {} (Python {}) '.format(version.VERSION, platform.python_version())),
-    ('heading_key', "q"), ":back ",
-]
+from mitmproxy.tools.console import layoutwidget
+from mitmproxy.tools.console import tabs
 
 
-class HelpView(urwid.ListBox):
+class CListBox(urwid.ListBox):
+    def __init__(self, contents):
+        self.length = len(contents)
+        contents = contents[:] + [urwid.Text(["\n"])] * 5
+        super().__init__(contents)
+
+    def keypress(self, size, key):
+        if key == "m_end":
+            self.set_focus(self.length - 1)
+        elif key == "m_start":
+            self.set_focus(0)
+        else:
+            return super().keypress(size, key)
+
+
+class HelpView(tabs.Tabs, layoutwidget.LayoutWidget):
+    title = "Help"
     keyctx = "help"
 
-    def __init__(self, help_context):
-        self.help_context = help_context or []
-        urwid.ListBox.__init__(
-            self,
-            self.helptext()
+    def __init__(self, master):
+        self.master = master
+        self.helpctx = ""
+        super().__init__(
+            [
+                [self.keybindings_title, self.keybindings],
+                [self.filtexp_title, self.filtexp],
+            ]
         )
 
-    def helptext(self):
+    def keybindings_title(self):
+        return "Key Bindings"
+
+    def format_keys(self, binds):
+        kvs = []
+        for b in binds:
+            k = b.key
+            if b.key == " ":
+                k = "space"
+            kvs.append((k, b.help or b.command))
+        return common.format_keyvals(kvs)
+
+    def keybindings(self):
+        text = [
+            urwid.Text(
+                [
+                    ("title", "Keybindings for this view")
+                ]
+            )
+        ]
+        if self.helpctx:
+            text.extend(self.format_keys(self.master.keymap.list(self.helpctx)))
+
+        text.append(
+            urwid.Text(
+                [
+                    "\n",
+                    ("title", "Global Keybindings"),
+                ]
+            )
+        )
+
+        text.extend(self.format_keys(self.master.keymap.list("global")))
+
+        return CListBox(text)
+
+    def filtexp_title(self):
+        return "Filter Expressions"
+
+    def filtexp(self):
         text = []
-        text.append(urwid.Text([("head", "This view:\n")]))
-        text.extend(self.help_context)
-
-        text.append(urwid.Text([("head", "\n\nMovement:\n")]))
-        keys = [
-            ("j, k", "down, up"),
-            ("h, l", "left, right (in some contexts)"),
-            ("g, G", "go to beginning, end"),
-            ("space", "page down"),
-            ("pg up/down", "page up/down"),
-            ("ctrl+b/ctrl+f", "page up/down"),
-            ("arrows", "up, down, left, right"),
-        ]
-        text.extend(
-            common.format_keyvals(
-                keys,
-                key="key",
-                val="text",
-                indent=4))
-
-        text.append(urwid.Text([("head", "\n\nGlobal keys:\n")]))
-        keys = [
-            ("i", "set interception pattern"),
-            ("O", "options"),
-            ("q", "quit / return to previous page"),
-            ("Q", "quit without confirm prompt"),
-            ("R", "replay of requests/responses from file"),
-        ]
-        text.extend(
-            common.format_keyvals(keys, key="key", val="text", indent=4)
-        )
-
-        text.append(urwid.Text([("head", "\n\nFilter expressions:\n")]))
         text.extend(common.format_keyvals(flowfilter.help, key="key", val="text", indent=4))
-
         text.append(
             urwid.Text(
                 [
@@ -81,11 +98,11 @@ class HelpView(urwid.ListBox):
         text.extend(
             common.format_keyvals(examples, key="key", val="text", indent=4)
         )
-        return text
+        return CListBox(text)
 
-    def keypress(self, size, key):
-        if key == "m_start":
-            self.set_focus(0)
-        elif key == "m_end":
-            self.set_focus(len(self.body.contents))
-        return urwid.ListBox.keypress(self, size, key)
+    def layout_pushed(self, prev):
+        """
+            We are just about to push a window onto the stack.
+        """
+        self.helpctx = prev.keyctx
+        self.show()

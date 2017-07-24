@@ -10,7 +10,6 @@ The View:
 """
 import collections
 import typing
-import datetime
 
 import blinker
 import sortedcontainers
@@ -69,7 +68,7 @@ class _OrderKey:
 
 
 class OrderRequestStart(_OrderKey):
-    def generate(self, f: http.HTTPFlow) -> datetime.datetime:
+    def generate(self, f: http.HTTPFlow) -> int:
         return f.request.timestamp_start or 0
 
 
@@ -340,11 +339,12 @@ class View(collections.Sequence):
         """
             Load flows into the view, without processing them with addons.
         """
-        for i in io.FlowReader(open(path, "rb")).stream():
-            # Do this to get a new ID, so we can load the same file N times and
-            # get new flows each time. It would be more efficient to just have a
-            # .newid() method or something.
-            self.add([i.copy()])
+        with open(path, "rb") as f:
+            for i in io.FlowReader(f).stream():
+                # Do this to get a new ID, so we can load the same file N times and
+                # get new flows each time. It would be more efficient to just have a
+                # .newid() method or something.
+                self.add([i.copy()])
 
     @command.command("view.go")
     def go(self, dst: int) -> None:
@@ -389,6 +389,8 @@ class View(collections.Sequence):
                     self.sig_view_remove.send(self, flow=f)
                 del self._store[f.id]
                 self.sig_store_remove.send(self, flow=f)
+        if len(flows) > 1:
+            ctx.log.alert("Removed %s flows" % len(flows))
 
     @command.command("view.resolve")
     def resolve(self, spec: str) -> typing.Sequence[mitmproxy.flow.Flow]:

@@ -2,13 +2,12 @@ import math
 
 import urwid
 
-from mitmproxy.tools.console import common
 from mitmproxy.tools.console import signals
 from mitmproxy.tools.console import grideditor
+from mitmproxy.tools.console import layoutwidget
 
 
-class SimpleOverlay(urwid.Overlay):
-    keyctx = "overlay"
+class SimpleOverlay(urwid.Overlay, layoutwidget.LayoutWidget):
 
     def __init__(self, master, widget, parent, width, valign="middle"):
         self.widget = widget
@@ -22,14 +21,21 @@ class SimpleOverlay(urwid.Overlay):
             height="pack"
         )
 
-    def keypress(self, size, key):
-        key = super().keypress(size, key)
-        if key == "esc":
-            signals.pop_view_state.send(self)
-        if key == "?":
-            self.master.view_help(self.widget.make_help())
-        else:
-            return key
+    @property
+    def keyctx(self):
+        return getattr(self.widget, "keyctx")
+
+    def key_responder(self):
+        return self.widget.key_responder()
+
+    def focus_changed(self):
+        return self.widget.focus_changed()
+
+    def view_changed(self):
+        return self.widget.view_changed()
+
+    def layout_popping(self):
+        return self.widget.layout_popping()
 
 
 class Choice(urwid.WidgetWrap):
@@ -81,7 +87,9 @@ class ChooserListWalker(urwid.ListWalker):
         return self._get(pos, False), pos
 
 
-class Chooser(urwid.WidgetWrap):
+class Chooser(urwid.WidgetWrap, layoutwidget.LayoutWidget):
+    keyctx = "chooser"
+
     def __init__(self, master, title, choices, current, callback):
         self.master = master
         self.choices = choices
@@ -107,22 +115,17 @@ class Chooser(urwid.WidgetWrap):
 
     def keypress(self, size, key):
         key = self.master.keymap.handle("chooser", key)
-        if key == "enter":
+        if key == "m_select":
             self.callback(self.choices[self.walker.index])
+            signals.pop_view_state.send(self)
+        elif key == "esc":
             signals.pop_view_state.send(self)
         return super().keypress(size, key)
 
-    def make_help(self):
-        text = []
-        keys = [
-            ("enter", "choose option"),
-            ("esc", "exit chooser"),
-        ]
-        text.extend(common.format_keyvals(keys, key="key", val="text", indent=4))
-        return text
 
+class OptionsOverlay(urwid.WidgetWrap, layoutwidget.LayoutWidget):
+    keyctx = "grideditor"
 
-class OptionsOverlay(urwid.WidgetWrap):
     def __init__(self, master, name, vals, vspace):
         """
             vspace: how much vertical space to keep clear
@@ -140,5 +143,8 @@ class OptionsOverlay(urwid.WidgetWrap):
         )
         self.width = math.ceil(cols * 0.8)
 
-    def make_help(self):
-        return self.ge.make_help()
+    def key_responder(self):
+        return self.ge.key_responder()
+
+    def layout_popping(self):
+        return self.ge.layout_popping()

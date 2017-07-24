@@ -257,6 +257,10 @@ def test_serialize():
     with pytest.raises(Exception, match="Config error"):
         optmanager.load(o2, t)
 
+    t = "# a comment"
+    optmanager.load(o2, t)
+    assert optmanager.load(o2, "foobar: '123'") == {"foobar": "123"}
+
     t = ""
     optmanager.load(o2, t)
     assert optmanager.load(o2, "foobar: '123'") == {"foobar": "123"}
@@ -332,6 +336,12 @@ def test_option():
 def test_dump_defaults():
     o = options.Options()
     assert optmanager.dump_defaults(o)
+
+
+def test_dump_dicts():
+    o = options.Options()
+    assert optmanager.dump_dicts(o)
+    assert optmanager.dump_dicts(o, ['http2', 'anticomp'])
 
 
 class TTypes(optmanager.OptManager):

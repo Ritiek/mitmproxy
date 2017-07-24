@@ -1,6 +1,7 @@
 import traceback
 import sys
 import time
+import os
 import pytest
 
 from unittest import mock
@@ -27,6 +28,30 @@ def test_load_script():
             "nonexistent"
         )
         assert not ns
+
+
+def test_load_fullname():
+    """
+    Test that loading two scripts at locations a/foo.py and b/foo.py works.
+    This only succeeds if they get assigned different basenames.
+
+    """
+    with taddons.context() as tctx:
+        ns = script.load_script(
+            tctx.ctx(),
+            tutils.test_data.path(
+                "mitmproxy/data/addonscripts/addon.py"
+            )
+        )
+        assert ns.addons
+        ns2 = script.load_script(
+            tctx.ctx(),
+            tutils.test_data.path(
+                "mitmproxy/data/addonscripts/same_filename/addon.py"
+            )
+        )
+        assert ns.name != ns2.name
+        assert not hasattr(ns2, "addons")
 
 
 def test_script_print_stdout():
@@ -182,6 +207,20 @@ class TestScriptLoader:
                     sc,
                     scripts = ["one", "one"]
                 )
+
+    def test_script_deletion(self):
+        tdir = tutils.test_data.path("mitmproxy/data/addonscripts/")
+        with open(tdir + "/dummy.py", 'w') as f:
+            f.write("\n")
+        with taddons.context() as tctx:
+            sl = script.ScriptLoader()
+            tctx.master.addons.add(sl)
+            tctx.configure(sl, scripts=[tutils.test_data.path("mitmproxy/data/addonscripts/dummy.py")])
+
+            os.remove(tutils.test_data.path("mitmproxy/data/addonscripts/dummy.py"))
+            tctx.invoke(sl, "tick")
+            assert not tctx.options.scripts
+            assert not sl.addons
 
     def test_order(self):
         rec = tutils.test_data.path("mitmproxy/data/addonscripts/recorder")

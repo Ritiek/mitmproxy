@@ -132,9 +132,10 @@ def test_filter():
 
 
 def tdump(path, flows):
-    w = io.FlowWriter(open(path, "wb"))
-    for i in flows:
-        w.add(i)
+    with open(path, "wb") as f:
+        w = io.FlowWriter(f)
+        for i in flows:
+            w.add(i)
 
 
 def test_create():
@@ -259,6 +260,16 @@ def test_duplicate():
         v.duplicate(f)
         assert len(v) == 4
         assert v.focus.index == 2
+
+
+def test_remove():
+    v = view.View()
+    with taddons.context():
+        f = [tflow.tflow(), tflow.tflow()]
+        v.add(f)
+        assert len(v) == 2
+        v.remove(f)
+        assert len(v) == 0
 
 
 def test_setgetval():

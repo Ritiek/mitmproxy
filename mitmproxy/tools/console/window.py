@@ -4,11 +4,23 @@ from mitmproxy.tools.console import statusbar
 from mitmproxy.tools.console import flowlist
 from mitmproxy.tools.console import flowview
 from mitmproxy.tools.console import commands
+from mitmproxy.tools.console import keybindings
 from mitmproxy.tools.console import options
 from mitmproxy.tools.console import overlay
 from mitmproxy.tools.console import help
 from mitmproxy.tools.console import grideditor
 from mitmproxy.tools.console import eventlog
+
+
+class Header(urwid.Frame):
+    def __init__(self, widget, title, focus):
+        super().__init__(
+            widget,
+            header = urwid.AttrWrap(
+                urwid.Text(title),
+                "heading" if focus else "heading_inactive"
+            )
+        )
 
 
 class WindowStack:
@@ -18,8 +30,9 @@ class WindowStack:
             flowlist = flowlist.FlowListBox(master),
             flowview = flowview.FlowView(master),
             commands = commands.Commands(master),
+            keybindings = keybindings.KeyBindings(master),
             options = options.Options(master),
-            help = help.HelpView(None),
+            help = help.HelpView(master),
             eventlog = eventlog.EventLog(master),
 
             edit_focus_query = grideditor.QueryEditor(master),
@@ -34,43 +47,57 @@ class WindowStack:
         self.overlay = None
 
     def set_overlay(self, o, **kwargs):
-        self.overlay = overlay.SimpleOverlay(self, o, self.top(), o.width, **kwargs)
+        self.overlay = overlay.SimpleOverlay(
+            self, o, self.top_widget(), o.width, **kwargs,
+        )
 
-    @property
-    def topwin(self):
+    def top_window(self):
+        """
+            The current top window, ignoring overlays.
+        """
         return self.windows[self.stack[-1]]
 
-    def top(self):
+    def top_widget(self):
+        """
+            The current top widget - either a window or the active overlay.
+        """
         if self.overlay:
             return self.overlay
-        return self.topwin
+        return self.top_window()
 
     def push(self, wname):
         if self.stack[-1] == wname:
             return
+        prev = self.top_window()
         self.stack.append(wname)
+        self.call("layout_pushed", prev)
 
     def pop(self, *args, **kwargs):
         """
             Pop off the stack, return True if we're already at the top.
         """
+        if not self.overlay and len(self.stack) == 1:
+            return True
+        self.call("layout_popping")
         if self.overlay:
             self.overlay = None
-        elif len(self.stack) > 1:
-            self.call("view_popping")
-            self.stack.pop()
         else:
-            return True
+            self.stack.pop()
 
     def call(self, name, *args, **kwargs):
-        f = getattr(self.topwin, name, None)
-        if f:
-            f(*args, **kwargs)
+        """
+            Call a function on both the top window, and the overlay if there is
+            one. If the widget has a key_responder, we call the function on the
+            responder instead.
+        """
+        getattr(self.top_window(), name)(*args, **kwargs)
+        if self.overlay:
+            getattr(self.overlay, name)(*args, **kwargs)
 
 
 class Window(urwid.Frame):
     def __init__(self, master):
-        self.statusbar = statusbar.StatusBar(master, "")
+        self.statusbar = statusbar.StatusBar(master)
         super().__init__(
             None,
             header = None,
@@ -90,6 +117,7 @@ class Window(urwid.Frame):
         signals.push_view_state.connect(self.push)
 
         self.master.options.subscribe(self.configure, ["console_layout"])
+        self.master.options.subscribe(self.configure, ["console_layout_headers"])
         self.pane = 0
         self.stacks = [
             WindowStack(master, "flowlist"),
@@ -107,21 +135,33 @@ class Window(urwid.Frame):
             Redraw the layout.
         """
         c = self.master.options.console_layout
+        if c == "single":
+            self.pane = 0
+
+        def wrapped(idx):
+            window = self.stacks[idx].top_window()
+            widget = self.stacks[idx].top_widget()
+            if self.master.options.console_layout_headers and window.title:
+                return Header(widget, window.title, self.pane == idx)
+            else:
+                return widget
 
         w = None
         if c == "single":
-            w = self.stacks[0].top()
+            w = wrapped(0)
         elif c == "vertical":
             w = urwid.Pile(
-                [i.top() for i in self.stacks]
+                [
+                    wrapped(i) for i, s in enumerate(self.stacks)
+                ]
             )
         else:
             w = urwid.Columns(
-                [i.top() for i in self.stacks], dividechars=1
+                [wrapped(i) for i, s in enumerate(self.stacks)],
+                dividechars=1
             )
+
         self.body = urwid.AttrWrap(w, "background")
-        if c == "single":
-            self.pane = 0
 
     def flow_changed(self, sender, flow):
         if self.master.view.focus.flow:
@@ -173,11 +213,18 @@ class Window(urwid.Frame):
 
     def current(self, keyctx):
         """
-
-            Returns the top window of the current stack, IF the current focus
-            has a matching key context.
+            Returns the active widget, but only the current focus or overlay has
+            a matching key context.
         """
-        t = self.focus_stack().topwin
+        t = self.focus_stack().top_widget()
+        if t.keyctx == keyctx:
+            return t
+
+    def current_window(self, keyctx):
+        """
+            Returns the active window, ignoring overlays.
+        """
+        t = self.focus_stack().top_window()
         if t.keyctx == keyctx:
             return t
 
@@ -185,7 +232,7 @@ class Window(urwid.Frame):
         """
             Returns the top window of either stack if they match the context.
         """
-        for t in [x.topwin for x in self.stacks]:
+        for t in [x.top_window() for x in self.stacks]:
             if t.keyctx == keyctx:
                 return t
 
@@ -200,6 +247,7 @@ class Window(urwid.Frame):
             self.pane = 0
         else:
             self.pane = (self.pane + 1) % len(self.stacks)
+        self.refresh()
 
     def mouse_event(self, *args, **kwargs):
         # args: (size, event, button, col, row)
@@ -222,7 +270,7 @@ class Window(urwid.Frame):
         if self.focus_part == "footer":
             return super().keypress(size, k)
         else:
-            fs = self.focus_stack().top()
+            fs = self.focus_stack().top_widget()
             k = fs.keypress(size, k)
             if k:
                 return self.master.keymap.handle(fs.keyctx, k)
